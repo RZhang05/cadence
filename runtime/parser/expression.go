@@ -433,19 +433,6 @@ func init() {
 		},
 	})
 
-	defineExpr(literalExpr{
-		tokenType: lexer.TokenString,
-		nullDenotation: func(p *parser, token lexer.Token) (ast.Expression, error) {
-			literal := p.tokenSource(token)
-			parsedString := parseStringLiteral(p, literal)
-			return ast.NewStringExpression(
-				p.memoryGauge,
-				parsedString,
-				token.Range,
-			), nil
-		},
-	})
-
 	defineExpr(prefixExpr{
 		tokenType:    lexer.TokenMinus,
 		bindingPower: exprLeftBindingPowerUnaryPrefix,
@@ -510,6 +497,7 @@ func init() {
 	defineNestedExpression()
 	defineInvocationExpression()
 	defineArrayExpression()
+	defineStringExpression()
 	defineDictionaryExpression()
 	defineIndexExpression()
 	definePathExpression()
@@ -1144,6 +1132,35 @@ func defineNestedExpression() {
 	)
 }
 
+func defineStringExpression() {
+	setExprNullDenotation(
+		lexer.TokenString,
+		func(p *parser, token lexer.Token) (ast.Expression, error) {
+			literal := p.tokenSource(token)
+			literals, exprs, err := parseString(p, literal)
+
+			if err != nil {
+				return nil, err
+			}
+
+			if len(exprs) == 0 {
+				return ast.NewStringExpression(
+					p.memoryGauge,
+					literals[0], // must be true
+					token.Range,
+				), nil
+			} else {
+				return ast.NewStringTemplateExpression(
+					p.memoryGauge,
+					literals, exprs,
+					token.Range,
+				), nil
+			}
+
+		},
+	)
+}
+
 func defineArrayExpression() {
 	setExprNullDenotation(
 		lexer.TokenBracketOpen,
@@ -1558,6 +1575,204 @@ func applyExprLeftDenotation(p *parser, token lexer.Token, left ast.Expression) 
 		return nil, p.syntaxError("unexpected token in expression: %s", token.Type)
 	}
 	return leftDenotation(p, token, left)
+}
+
+// STRINGTODO: add a wrapper function which decides whether a string is a stringliteral or a stringtemplate
+// STRINGTODO: add another function called parseStringTemplate which creates a string template thing
+// STRINGTODO: this should be similar to arrayexpression so we can use that for inspiration
+func parseString(p *parser, s []byte) (literals []string, exprs []ast.Expression, err error) {
+	length := len(s)
+	if length == 0 {
+		p.reportSyntaxError("missing start of string literal: expected '\"'")
+		return
+	}
+
+	if length >= 1 {
+		first := s[0]
+		if first != '"' {
+			p.reportSyntaxError("invalid start of string literal: expected '\"', got %q", first)
+		}
+	}
+	missingEnd := false
+	endOffset := length
+	if length >= 2 {
+		lastIndex := length - 1
+		last := s[lastIndex]
+		if last != '"' {
+			missingEnd = true
+		} else {
+			endOffset = lastIndex
+		}
+	} else {
+		missingEnd = true
+	}
+
+	literals, exprs, err = parseStringContent(p, s[1:endOffset])
+
+	if missingEnd {
+		p.reportSyntaxError("invalid end of string literal: missing '\"'")
+	}
+
+	return
+}
+
+// parseStringLiteralContent parses the string literalExpr contents, excluding start and end quotes
+func parseStringContent(p *parser, s []byte) (literals []string, exprs []ast.Expression, err error) {
+
+	var builder strings.Builder
+	defer func() {
+		if builder.Len() != 0 {
+			literals = append(literals, builder.String())
+		}
+	}()
+
+	length := len(s)
+
+	var r rune
+	index := 0
+
+	atEnd := index >= length
+
+	advance := func() {
+		if atEnd {
+			r = lexer.EOF
+			return
+		}
+
+		var width int
+		r, width = utf8.DecodeRune(s[index:])
+		index += width
+
+		atEnd = index >= length
+	}
+
+	for index < length {
+		advance()
+
+		// string template: non escaped $
+		if r == '$' {
+			literals = append(literals, builder.String())
+			builder.Reset()
+
+			advance()
+			if r != '{' {
+				p.reportSyntaxError("string template must start with ${")
+				return
+			}
+			var startInd = index // index points at the next one
+			var endInd = index   // default value
+			advance()
+			var cnt = 1 // balance brackets
+			for cnt > 0 && r != lexer.EOF {
+				if r == '{' {
+					cnt++
+					endInd = index
+				} else if r == '}' {
+					cnt--
+				} else {
+					endInd = index
+				}
+				advance()
+			}
+			if cnt != 0 {
+				p.reportSyntaxError("string template missing ending }")
+				return
+			}
+			// create a parser to parse this subexpression
+			var expr, err = ParseExpression(p.memoryGauge, s[startInd:endInd], p.config)
+			if len(err) != 0 {
+				return nil, nil, err[0]
+			}
+			exprs = append(exprs, expr)
+			continue
+		}
+
+		if r != '\\' {
+			builder.WriteRune(r)
+			continue
+		}
+
+		if atEnd {
+			p.reportSyntaxError("incomplete escape sequence: missing character after escape character")
+			return
+		}
+
+		advance()
+
+		switch r {
+		case '0':
+			builder.WriteByte(0)
+		case 'n':
+			builder.WriteByte('\n')
+		case 'r':
+			builder.WriteByte('\r')
+		case 't':
+			builder.WriteByte('\t')
+		case '"':
+			builder.WriteByte('"')
+		case '\'':
+			builder.WriteByte('\'')
+		case '\\':
+			builder.WriteByte('\\')
+		case 'u':
+			if atEnd {
+				p.reportSyntaxError(
+					"incomplete Unicode escape sequence: missing character '{' after escape character",
+				)
+				return
+			}
+			advance()
+			if r != '{' {
+				p.reportSyntaxError("invalid Unicode escape sequence: expected '{', got %q", r)
+				continue
+			}
+
+			var r2 rune
+			valid := true
+			digitIndex := 0
+			for ; !atEnd && digitIndex < 8; digitIndex++ {
+				advance()
+				if r == '}' {
+					break
+				}
+
+				parsed := parseHex(r)
+
+				if parsed < 0 {
+					p.reportSyntaxError("invalid Unicode escape sequence: expected hex digit, got %q", r)
+					valid = false
+				} else {
+					r2 = r2<<4 | parsed
+				}
+			}
+
+			if digitIndex > 0 && valid {
+				builder.WriteRune(r2)
+			}
+
+			if r != '}' {
+				advance()
+			}
+
+			switch r {
+			case '}':
+				break
+			case lexer.EOF:
+				p.reportSyntaxError(
+					"incomplete Unicode escape sequence: missing character '}' after escape character",
+				)
+			default:
+				p.reportSyntaxError("incomplete Unicode escape sequence: expected '}', got %q", r)
+			}
+
+		default:
+			// TODO: include index/column in error
+			p.reportSyntaxError("invalid escape character: %q", r)
+			// skip invalid escape character, don't write to result
+		}
+	}
+
+	return
 }
 
 // parseStringLiteral parses a whole string literal, including start and end quotes
