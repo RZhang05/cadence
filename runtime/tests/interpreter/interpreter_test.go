@@ -12464,4 +12464,41 @@ func TestInterpretStringTemplates(t *testing.T) {
 			inter.Globals.Get("x").GetValue(inter),
 		)
 	})
+
+	t.Run("nested", func(t *testing.T) {
+		t.Parallel()
+
+		inter := parseCheckAndInterpret(t, `
+			let x: String = "\(2*(4-2) + 1 == 5)"
+		`)
+
+		AssertValuesEqual(
+			t,
+			inter,
+			interpreter.NewUnmeteredStringValue("true"),
+			inter.Globals.Get("x").GetValue(inter),
+		)
+	})
+
+	t.Run("struct", func(t *testing.T) {
+		t.Parallel()
+
+		inter := parseCheckAndInterpret(t, `
+			access(all)
+			struct A {
+				fun toString(): String {
+					return "A"
+				}
+			}
+			let a: A = A()
+			let x: String = "\(a)"
+		`)
+
+		AssertValuesEqual(
+			t,
+			inter,
+			interpreter.NewUnmeteredStringValue("A"),
+			inter.Globals.Get("x").GetValue(inter),
+		)
+	})
 }
