@@ -787,4 +787,24 @@ func TestCheckStringTemplate(t *testing.T) {
 
 		assert.IsType(t, &sema.TypeMismatchWithDescriptionError{}, errs[0])
 	})
+
+	t.Run("invalid, non explicit Stringer", func(t *testing.T) {
+
+		t.Parallel()
+
+		_, err := ParseAndCheck(t, `
+			access(all)
+			struct SomeStruct {
+				view fun toString(): String {
+					return "test"
+				}
+			}
+			let a = SomeStruct()
+			let x: String = "\(a)" 
+		`)
+
+		errs := RequireCheckerErrors(t, err, 1)
+
+		assert.IsType(t, &sema.TypeMismatchWithDescriptionError{}, errs[0])
+	})
 }

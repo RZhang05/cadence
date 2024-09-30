@@ -55,7 +55,7 @@ func (checker *Checker) VisitStringTemplateExpression(stringTemplateExpression *
 				checker.report(
 					&TypeMismatchWithDescriptionError{
 						ActualType:              valueType,
-						ExpectedTypeDescription: "a type with built-in toString() or bool",
+						ExpectedTypeDescription: "expected Stringer type",
 						Range:                   ast.NewRangeFromPositioned(checker.memoryGauge, element),
 					},
 				)

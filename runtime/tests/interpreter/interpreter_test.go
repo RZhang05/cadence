@@ -12485,8 +12485,8 @@ func TestInterpretStringTemplates(t *testing.T) {
 
 		inter := parseCheckAndInterpret(t, `
 			access(all)
-			struct A {
-				fun toString(): String {
+			struct A : Stringer {
+				view fun toString(): String {
 					return "A"
 				}
 			}
@@ -12498,6 +12498,34 @@ func TestInterpretStringTemplates(t *testing.T) {
 			t,
 			inter,
 			interpreter.NewUnmeteredStringValue("A"),
+			inter.Globals.Get("x").GetValue(inter),
+		)
+	})
+
+	t.Run("useful struct", func(t *testing.T) {
+		t.Parallel()
+
+		inter := parseCheckAndInterpret(t, `
+			access(all)
+			struct SomeObj : Stringer {
+				var id: Int
+
+				init (id: Int) {
+					self.id = id
+				}
+
+				view fun toString(): String {
+					return "ID: \(self.id)"
+				}
+			}
+			let a: SomeObj = SomeObj(id: 101)
+			let x: String = "The object that failed is {\(a)}"
+		`)
+
+		AssertValuesEqual(
+			t,
+			inter,
+			interpreter.NewUnmeteredStringValue("The object that failed is {ID: 101}"),
 			inter.Globals.Get("x").GetValue(inter),
 		)
 	})
