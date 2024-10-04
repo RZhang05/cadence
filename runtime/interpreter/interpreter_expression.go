@@ -971,6 +971,27 @@ func (interpreter *Interpreter) VisitStringTemplateExpression(expression *ast.St
 				builder.WriteString(value.Str)
 			case CharacterValue:
 				builder.WriteString(value.Str)
+			case *CompositeValue:
+				result := interpreter.getMember(value, EmptyLocationRange, "toString")
+				function, ok := result.(FunctionValue)
+				if !ok {
+					panic(errors.NewUnreachableError())
+				}
+
+				// invoke toString
+				s := interpreter.invokeFunctionValue(
+					function,
+					nil,
+					nil,
+					nil,
+					nil,
+					nil,
+					expression,
+				).String()
+
+				// remove quotations
+				s = s[1 : len(s)-1]
+				builder.WriteString(s)
 			default:
 				builder.WriteString(value.String())
 			}

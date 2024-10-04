@@ -30,7 +30,8 @@ func isValidStringTemplateValue(valueType Type) bool {
 		return true
 	default:
 		return IsSubType(valueType, NumberType) ||
-			IsSubType(valueType, PathType)
+			IsSubType(valueType, PathType) ||
+			IsSubType(valueType, StringerType)
 	}
 }
 
@@ -55,7 +56,7 @@ func (checker *Checker) VisitStringTemplateExpression(stringTemplateExpression *
 				checker.report(
 					&TypeMismatchWithDescriptionError{
 						ActualType:              valueType,
-						ExpectedTypeDescription: "expected Stringer type",
+						ExpectedTypeDescription: "Stringer type",
 						Range:                   ast.NewRangeFromPositioned(checker.memoryGauge, element),
 					},
 				)
