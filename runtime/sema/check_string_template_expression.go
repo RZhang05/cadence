@@ -31,7 +31,7 @@ func isValidStringTemplateValue(valueType Type) bool {
 	default:
 		return IsSubType(valueType, NumberType) ||
 			IsSubType(valueType, PathType) ||
-			IsSubType(valueType, StringerType)
+			IsSubType(valueType, StructStringerType)
 	}
 }
 

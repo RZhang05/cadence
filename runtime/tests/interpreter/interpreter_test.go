@@ -12485,7 +12485,7 @@ func TestInterpretStringTemplates(t *testing.T) {
 
 		inter := parseCheckAndInterpret(t, `
 			access(all)
-			struct A : Stringer {
+			struct A : StructStringer {
 				view fun toString(): String {
 					return "A"
 				}
@@ -12507,7 +12507,7 @@ func TestInterpretStringTemplates(t *testing.T) {
 
 		inter := parseCheckAndInterpret(t, `
 			access(all)
-			struct SomeObj : Stringer {
+			struct SomeObj : StructStringer {
 				var id: Int
 
 				init (id: Int) {

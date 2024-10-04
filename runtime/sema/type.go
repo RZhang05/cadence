@@ -4931,17 +4931,6 @@ func IsHashableStructType(t Type) bool {
 	}
 }
 
-// which simple types conform to stringer interface (except Bool?)
-func IsStringerType(t Type) bool {
-	switch t {
-	case BoolType, CharacterType, StringType:
-		return true
-	default:
-		return IsSubType(t, NumberType) ||
-			IsSubType(t, PathType) || IsSubType(t, TheAddressType)
-	}
-}
-
 func (t *CompositeType) GetBaseType() Type {
 	return t.baseType
 }
@@ -7888,12 +7877,6 @@ func checkSubTypeWithoutEquality(subType Type, superType Type) bool {
 
 				return typedSuperType.EffectiveIntersectionSet().
 					IsSubsetOf(typedSubType.EffectiveInterfaceConformanceSet())
-			}
-
-			// STRINGERTODO: other options? how to make existing simple types
-			// conform to an intersection type?
-			if typedSuperType.Types[0].Identifier == StringerTypeName {
-				return IsStringerType(subType)
 			}
 
 		default:
