@@ -6198,7 +6198,7 @@ func TestParseStringTemplate(t *testing.T) {
 		)
 	})
 
-	t.Run("invalid, num", func(t *testing.T) {
+	t.Run("valid, num", func(t *testing.T) {
 
 		t.Parallel()
 
@@ -6213,16 +6213,7 @@ func TestParseStringTemplate(t *testing.T) {
 			}
 		}
 
-		require.Error(t, err)
-		utils.AssertEqualWithDiff(t,
-			[]error{
-				&SyntaxError{
-					Message: "expected identifier got: 2 + 2",
-					Pos:     ast.Position{Offset: 13, Line: 2, Column: 12},
-				},
-			},
-			errs,
-		)
+		require.NoError(t, err)
 	})
 
 	t.Run("valid, nested identifier", func(t *testing.T) {
@@ -6291,7 +6282,7 @@ func TestParseStringTemplate(t *testing.T) {
 		)
 	})
 
-	t.Run("invalid, function identifier", func(t *testing.T) {
+	t.Run("valid, function identifier", func(t *testing.T) {
 
 		t.Parallel()
 
@@ -6306,19 +6297,10 @@ func TestParseStringTemplate(t *testing.T) {
 			}
 		}
 
-		require.Error(t, err)
-		utils.AssertEqualWithDiff(t,
-			[]error{
-				&SyntaxError{
-					Message: "expected identifier got: add()",
-					Pos:     ast.Position{Offset: 12, Line: 2, Column: 11},
-				},
-			},
-			errs,
-		)
+		require.NoError(t, err)
 	})
 
-	t.Run("unbalanced paren", func(t *testing.T) {
+	t.Run("invalid, missing paren", func(t *testing.T) {
 
 		t.Parallel()
 
@@ -6345,7 +6327,34 @@ func TestParseStringTemplate(t *testing.T) {
 		)
 	})
 
-	t.Run("nested templates", func(t *testing.T) {
+	t.Run("invalid, nested expression paren", func(t *testing.T) {
+
+		t.Parallel()
+
+		_, errs := testParseExpression(`
+			"\((2+2)/2()"
+		`)
+
+		var err error
+		if len(errs) > 0 {
+			err = Error{
+				Errors: errs,
+			}
+		}
+
+		require.Error(t, err)
+		utils.AssertEqualWithDiff(t,
+			[]error{
+				&SyntaxError{
+					Message: "expected token ')'",
+					Pos:     ast.Position{Offset: 16, Line: 2, Column: 15},
+				},
+			},
+			errs,
+		)
+	})
+
+	t.Run("invalid, nested templates", func(t *testing.T) {
 
 		t.Parallel()
 
@@ -6370,6 +6379,45 @@ func TestParseStringTemplate(t *testing.T) {
 			},
 			errs,
 		)
+	})
+
+	t.Run("valid, extra closing paren", func(t *testing.T) {
+
+		t.Parallel()
+
+		actual, errs := testParseExpression(`
+			"\(a))"
+		`)
+
+		var err error
+		if len(errs) > 0 {
+			err = Error{
+				Errors: errs,
+			}
+		}
+
+		require.NoError(t, err)
+
+		expected := &ast.StringTemplateExpression{
+			Values: []string{
+				"",
+				")",
+			},
+			Expressions: []ast.Expression{
+				&ast.IdentifierExpression{
+					Identifier: ast.Identifier{
+						Identifier: "a",
+						Pos:        ast.Position{Offset: 7, Line: 2, Column: 6},
+					},
+				},
+			},
+			Range: ast.Range{
+				StartPos: ast.Position{Offset: 4, Line: 2, Column: 3},
+				EndPos:   ast.Position{Offset: 10, Line: 2, Column: 9},
+			},
+		}
+
+		utils.AssertEqualWithDiff(t, expected, actual)
 	})
 }
 
